@@ -11,6 +11,15 @@ from model import DnsAdClassifier
 
 app = Flask(__name__)
 clf = DnsAdClassifier()
+API_KEY = os.environ.get("API_KEY", "")
+
+def require_key():
+    if not API_KEY:
+        return None  # no key set = open (dev mode)
+    k = request.headers.get("X-Api-Key", "")
+    if k != API_KEY:
+        return jsonify({"error": "unauthorized"}), 401
+    return None
 
 @app.route("/health")
 def health():
@@ -18,10 +27,8 @@ def health():
 
 @app.route("/train", methods=["POST"])
 def train():
-    """
-    Body: { "domains": [ {name, avg_pkt, std_pkt, freq, blocked} ] }
-    blocked=true means AGH blocklist already flagged it (ground truth label).
-    """
+    err = require_key()
+    if err: return err
     body = request.get_json(force=True)
     domains = body.get("domains", [])
     if len(domains) < 5:
@@ -31,10 +38,8 @@ def train():
 
 @app.route("/classify", methods=["POST"])
 def classify():
-    """
-    Body: { "domains": [ {name, avg_pkt, std_pkt, freq, clients, latency_avg} ] }
-    Returns each domain with ad_prob (0.0-1.0) and label (ad/normal/youtube_ad).
-    """
+    err = require_key()
+    if err: return err
     body = request.get_json(force=True)
     domains = body.get("domains", [])
     if not domains:
@@ -44,11 +49,8 @@ def classify():
 
 @app.route("/classify_youtube", methods=["POST"])
 def classify_youtube():
-    """
-    Specialized YouTube ad classifier using packet size bursts.
-    Body: { "packets": [ {domain, size, ts_ms} ] }
-    Looks for IMA SDK patterns + size anomalies during video playback.
-    """
+    err = require_key()
+    if err: return err
     body   = request.get_json(force=True)
     packets = body.get("packets", [])
     results = clf.classify_youtube_ads(packets)
